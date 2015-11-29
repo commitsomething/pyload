@@ -140,8 +140,18 @@ class RapidgatorNet(SimpleHoster):
 
             if "The verification code is incorrect" in self.data:
                 self.retry_captcha()
+            elif "Captcha expired" in self.data:
+                # wait an hour bevore we retry
+                self.retry_captcha(attemps=3, wait = 60 * 60)
             else:
-                self.captcha.correct()
+                # now we should be able to extract the download link
+                m = re.search(self.LINK_FREE_PATTERN, self.data)
+                if m is not None:
+                    self.link = m.group(1)
+                    self.captcha.correct()
+                else:
+                    self.captcha.invalid()
+
 
 
     def handle_captcha(self):

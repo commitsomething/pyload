@@ -38,7 +38,7 @@ except ImportError:
 class misc(object):
     __name__    = "misc"
     __type__    = "plugin"
-    __version__ = "0.26"
+    __version__ = "0.35"
     __status__  = "stable"
 
     __pattern__ = r'^unmatchable$'
@@ -55,7 +55,7 @@ class Config(object):
         self.plugin = plugin
 
 
-    def set(self, option, value):
+    def set(self, option, value, plugin=None):
         """
         Set config value for current plugin
 
@@ -63,10 +63,10 @@ class Config(object):
         :param value:
         :return:
         """
-        self.plugin.pyload.api.setConfigValue(self.plugin.classname, option, value, section="plugin")
+        self.plugin.pyload.api.setConfigValue(plugin or self.plugin.classname, option, value, section="plugin")
 
 
-    def get(self, option, default=None):
+    def get(self, option, default=None, plugin=None):
         """
         Returns config value for current plugin
 
@@ -74,7 +74,7 @@ class Config(object):
         :return:
         """
         try:
-            return self.plugin.pyload.config.getPlugin(self.plugin.classname, option)
+            return self.plugin.pyload.config.getPlugin(plugin or self.plugin.classname, option)
 
         except KeyError:
             self.plugin.log_debug("Config option `%s` not found, use default `%s`" % (option, default))  #@TODO: Restore to `log_warning` in 0.4.10
@@ -91,8 +91,7 @@ class DB(object):
         """
         Saves a value persistently to the database
         """
-        value = map(decode, value) if isiterable(value) else decode(value)
-        entry = json.dumps(value).encode('base64')
+        entry = json.dumps(value, ensure_ascii=False).encode('base64')
         self.plugin.pyload.db.setStorage(self.plugin.classname, key, entry)
 
 
@@ -335,9 +334,9 @@ def uniqify(seq):
 
 def has_method(obj, name):
     """
-    Check if name was defined in obj (return false if inhereted)
+    Check if function 'name' was defined in obj
     """
-    return hasattr(obj, '__dict__') and name in obj.__dict__
+    return callable(getattr(obj, name, None))
 
 
 def html_unescape(text):
@@ -655,7 +654,7 @@ def format_exc(frame=None):
     Format call-stack and display exception information (if availible)
     """
     exc_info = sys.exc_info()
-    exc_desc = ""
+    exc_desc = u""
 
     callstack = traceback.extract_stack(frame)
     callstack = callstack[:-1]
@@ -666,10 +665,10 @@ def format_exc(frame=None):
         if callstack[-1][0] == exception_callstack[0][0]:  #@NOTE: Does this exception belongs to us?
             callstack = callstack[:-1]
             callstack.extend(exception_callstack)
-            exc_desc = "".join(traceback.format_exception_only(exc_info[0], exc_info[1]))
+            exc_desc = decode("".join(traceback.format_exception_only(exc_info[0], exc_info[1])))
 
-    msg  = "Traceback (most recent call last):\n"
-    msg += "".join(traceback.format_list(callstack))
+    msg  = u"Traceback (most recent call last):\n"
+    msg += decode("".join(traceback.format_list(callstack)))
     msg += exc_desc
 
     return msg
@@ -752,7 +751,10 @@ def parse_html_form(attr_str, html, input_names={}):
         inputs = {}
         action = parse_html_tag_attr_value("action", form.group('TAG'))
 
-        for inputtag in re.finditer(r'(<(input|textarea).*?>)([^<]*(?=</\2)|)', form.group('CONTENT'), re.I | re.S):
+        for inputtag in re.finditer(r'(<(input|textarea).*?>)([^<]*(?=</\2)|)',
+                                    re.sub(re.compile(r'<!--.+?-->', re.I | re.S), "", form.group('CONTENT')),
+                                    re.I | re.S):
+
             name = parse_html_tag_attr_value("name", inputtag.group(1))
             if name:
                 value = parse_html_tag_attr_value("value", inputtag.group(1))

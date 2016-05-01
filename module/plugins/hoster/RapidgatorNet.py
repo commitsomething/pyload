@@ -9,13 +9,13 @@ from module.plugins.captcha.AdsCaptcha import AdsCaptcha
 from module.plugins.captcha.ReCaptcha import ReCaptcha
 from module.plugins.captcha.SolveMedia import SolveMedia
 from module.plugins.internal.SimpleHoster import SimpleHoster
-from module.plugins.internal.misc import json
+from module.plugins.internal.misc import json, seconds_to_midnight
 
 
 class RapidgatorNet(SimpleHoster):
     __name__    = "RapidgatorNet"
     __type__    = "hoster"
-    __version__ = "0.40"
+    __version__ = "0.43"
     __status__  = "testing"
 
     __pattern__ = r'http://(?:www\.)?(rapidgator\.net|rg\.to)/file/\w+'
@@ -27,10 +27,11 @@ class RapidgatorNet(SimpleHoster):
 
     __description__ = """Rapidgator.net hoster plugin"""
     __license__     = "GPLv3"
-    __authors__     = [("zoidberg", "zoidberg@mujmail.cz"),
-                       ("chrox", None),
-                       ("stickell", "l.stickell@yahoo.it"),
-                       ("Walter Purcaro", "vuolter@gmail.com")]
+    __authors__     = [("zoidberg",       "zoidberg@mujmail.cz"       ),
+                       ("chrox",          None                        ),
+                       ("stickell",       "l.stickell@yahoo.it"       ),
+                       ("Walter Purcaro", "vuolter@gmail.com"         ),
+                       ("GammaCode",      "nitzo2001[AT]yahoo[DOT]com")]
 
 
     API_URL = "http://rapidgator.net/api/file"
@@ -43,9 +44,9 @@ class RapidgatorNet(SimpleHoster):
 
     JSVARS_PATTERN = r'\s+var\s*(startTimerUrl|getDownloadUrl|captchaUrl|fid|secs)\s*=\s*\'?(.*?)\'?;'
 
-    PREMIUM_ONLY_PATTERN = r'You can download files up to|This file can be downloaded by premium only<'
-    ERROR_PATTERN        = r'You have reached your (?:daily|hourly) downloads limit'
-    WAIT_PATTERN         = r'(Delay between downloads must be not less than|Try again in).+'
+    PREMIUM_ONLY_PATTERN         = r'You can download files up to|This file can be downloaded by premium only<'
+    DOWNLOAD_LIMIT_ERROR_PATTERN = r'You have reached your (daily|hourly) downloads limit'
+    WAIT_PATTERN                 = r'(?:Delay between downloads must be not less than|Try again in).+'
 
     LINK_FREE_PATTERN = r'return \'(http://\w+.rapidgator.net/.*)\';'
 
@@ -86,8 +87,7 @@ class RapidgatorNet(SimpleHoster):
             return json_data['response']
 
         elif status == 423:
-            self.account.empty()
-            self.retry()
+            self.restart(msg=json_data['response_details'], premium=False)
 
         else:
             self.account.relogin()
@@ -102,6 +102,19 @@ class RapidgatorNet(SimpleHoster):
         pyfile.size = self.api_data['size']
 
         self.link = self.api_response('download')['url']
+
+
+    def check_errors(self):
+        super(RapidgatorNet, self).check_errors()
+        m = re.search(self.DOWNLOAD_LIMIT_ERROR_PATTERN, self.data)
+        if m:
+            self.log_warning(m.group(0))
+            if m.group(1) == "daily":
+                wait_time = seconds_to_midnight()
+            else:
+                wait_time = 1 * 60 * 60
+
+            self.retry(wait=wait_time, msg=m.group(0))
 
 
     def handle_free(self, pyfile):
@@ -155,7 +168,6 @@ class RapidgatorNet(SimpleHoster):
                     self.captcha.correct()
                 else:
                     self.captcha.invalid()
-
 
 
     def handle_captcha(self):

@@ -118,6 +118,12 @@ class RapidgatorNet(SimpleHoster):
 
 
     def handle_free(self, pyfile):
+        # if this is a rg.to request we need to rewrite the request. needed so that the refere is rapidgator.net for the solvemedia captcha request to work and not return with a error: domain / ckey mismatch
+        if "//rg.to" in pyfile.url:
+	    rplurl = pyfile.url.replace("//rg.to", "//rapidgator.net")
+            self.log_debug("Replaced '%s' by '%s'" % (pyfile.url, rplurl))
+	    pyfile.url = rplurl
+
         jsvars = dict(re.findall(self.JSVARS_PATTERN, self.data))
         self.log_debug(jsvars)
 
